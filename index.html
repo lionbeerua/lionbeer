@@ -338,25 +338,28 @@ function showCrash(msg){
 }
 
 // ---------- shared storage via the Cloudflare Worker (works on ANY device/browser) ----------
-const SHARED_STORE_BASE = 'https://lion-beer-proxy.lionbeer-ua.workers.dev';
+const SHARED_STORE_BASE = 'https://lion-beer-data.lionbeer-ua.workers.dev';
 let memoryStore = {};
 async function storeGet(key){
   try{
     const res = await fetch(SHARED_STORE_BASE + '/data/' + encodeURIComponent(key));
+    if(!res.ok) throw new Error('сервер відповів ' + res.status);
     const data = await res.json();
     if(data.value!=null) memoryStore[key] = data.value;
     return data.value ?? null;
   }catch(e){
+    showCrash('Не вдалось завантажити дані з сервера — показую те, що є локально: ' + e.message);
     return memoryStore[key] || null;
   }
 }
 async function storeSet(key, value){
   memoryStore[key] = value;
   try{
-    await fetch(SHARED_STORE_BASE + '/data/' + encodeURIComponent(key), { method:'POST', body: value });
+    const res = await fetch(SHARED_STORE_BASE + '/data/' + encodeURIComponent(key), { method:'POST', body: value });
+    if(!res.ok) throw new Error('сервер відповів ' + res.status);
     return true;
   }catch(e){
-    showCrash('Не вдалось зберегти дані (перевір інтернет): ' + e.message);
+    showCrash('⚠️ Не вдалось зберегти дані на сервері (' + e.message + ') — вони можуть загубитись при перезавантаженні!');
     return false;
   }
 }
@@ -365,7 +368,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v37';
+const BUILD = 'v38';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
