@@ -7,8 +7,8 @@
 <meta name="supported-color-schemes" content="dark">
 <title>Lion Beer · Чистий прибуток</title>
 <style>
-  html{ color-scheme: dark only; }
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+  html{ color-scheme: dark; }
 
   :root{
     --bg:#141210;
@@ -186,7 +186,7 @@
 
 <div class="wrap">
 
-  <div id="crashBanner"></div>
+  <div id="crashBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px;"></div>
 
   <!-- DASHBOARD -->
   <div class="page active" id="page-dash">
@@ -411,7 +411,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v40';
+const BUILD = 'v41';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
