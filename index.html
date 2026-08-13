@@ -86,6 +86,11 @@
 
   .section-title{font-size:14px; font-weight:700; margin:22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
   .section-title .add{color:var(--orange); font-size:13px; font-weight:700; cursor:pointer;}
+  .add-expense-btn{
+    background:var(--orange-soft); color:var(--orange); border:2px dashed var(--orange);
+    font-size:16px; padding:16px; margin:10px 0 18px; border-radius:14px;
+  }
+  .add-expense-btn:active{ background:var(--orange); color:#1A1108; }
 
   .exp-item{
     background:var(--surface); border:1px solid var(--border); border-radius:14px;
@@ -251,7 +256,8 @@
 
   <!-- EXPENSES -->
   <div class="page" id="page-exp">
-    <div class="section-title">Витрати <span class="add" onclick="openExpenseModal()">+ Додати</span></div>
+    <div class="section-title">Витрати</div>
+    <button class="btn add-expense-btn" onclick="openExpenseModal()">+ Додати витрату</button>
     <div class="period-row" id="expPeriodRow"></div>
     <div id="expCustomRangeRow" class="row2" style="display:none; margin-bottom:14px;">
       <div class="field"><label>Від</label><input type="date" id="expCustomFromInput"></div>
@@ -411,7 +417,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v43';
+const BUILD = 'v44';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
