@@ -314,7 +314,6 @@
         <option>ЗП</option>
         <option>Комуналка</option>
         <option>Податки</option>
-        <option>Амортизація обладнання</option>
         <option>Інше</option>
       </select>
     </div>
@@ -412,7 +411,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v42';
+const BUILD = 'v43';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -545,6 +544,14 @@ function getPeriodRange(){
   return {from, to};
 }
 
+function parseLocalDate(dateStr){
+  // "YYYY-MM-DD" parsed via `new Date()` is UTC midnight, which shifts to the previous
+  // day in timezones ahead of UTC (like Ukraine) — parse the parts as local time instead.
+  if(!dateStr) return null;
+  const [y,m,d] = dateStr.split('-').map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m-1, d);
+}
 function fmtDate(d){
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
   return y+''+m+''+day;
@@ -873,8 +880,8 @@ function renderExpenses(){
   const visible = state.expenses.filter(e=>{
     if(e.recurring) return true; // ongoing bills always shown
     if(!e.date) return true;
-    const d = new Date(e.date);
-    return d>=new Date(from.toDateString()) && d<=new Date(to.toDateString());
+    const d = parseLocalDate(e.date);
+    return d && d>=new Date(from.toDateString()) && d<=new Date(to.toDateString());
   });
   if(!visible.length){ el.innerHTML = '<div class="empty">Витрат за цей період немає.</div>'; return; }
   el.innerHTML = '';
@@ -896,8 +903,8 @@ function sumExpenses(from, to){
       const dim = daysInMonth(from);
       total += (e.amount / dim) * days;
     } else if(e.date){
-      const d = new Date(e.date);
-      if(d>=new Date(from.toDateString()) && d<=new Date(to.toDateString())) total += e.amount;
+      const d = parseLocalDate(e.date);
+      if(d && d>=new Date(from.toDateString()) && d<=new Date(to.toDateString())) total += e.amount;
     }
   });
   return total;
