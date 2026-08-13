@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 <title>Lion Beer · Чистий прибуток</title>
 <style>
+  html{ color-scheme: dark only; }
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
   :root{
@@ -408,7 +411,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v39';
+const BUILD = 'v40';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
