@@ -248,6 +248,15 @@
   <!-- EXPENSES -->
   <div class="page" id="page-exp">
     <div class="section-title">Витрати <span class="add" onclick="openExpenseModal()">+ Додати</span></div>
+    <div class="period-row" id="expPeriodRow"></div>
+    <div id="expCustomRangeRow" class="row2" style="display:none; margin-bottom:14px;">
+      <div class="field"><label>Від</label><input type="date" id="expCustomFromInput"></div>
+      <div class="field"><label>До</label><input type="date" id="expCustomToInput"></div>
+    </div>
+    <div id="expCustomApplyRow" style="display:none; margin:-8px 0 14px;">
+      <button class="btn small" onclick="applyExpenseCustomRange()">Показати за цей період</button>
+    </div>
+    <div id="expPeriodBanner"></div>
     <div id="expList"></div>
   </div>
 
@@ -272,6 +281,10 @@
       <input id="inProxy" placeholder="залиш пустим, якщо ще не налаштував">
     </div>
     <button class="btn ghost" onclick="saveProxy()">Зберегти проксі</button>
+
+    <div class="section-title" style="margin-top:26px;">Сховище даних (синхронізація)</div>
+    <button class="btn ghost" onclick="testDataStore()">Перевірити з'єднання зі сховищем</button>
+    <div id="dataStoreBanner" style="margin-top:12px;"></div>
 
     <div class="section-title" style="margin-top:26px;">Собівартість і прибуток</div>
     <div class="banner ok">Тепер собівартість і валовий прибуток беруться напряму з Poster (поле product_profit по кожному товару за період) — оцінювати "% фудкосту" вручну більше не треба. Чистий прибуток = прибуток за Poster − твої витрати (оренда/ЗП/тощо).</div>
@@ -317,8 +330,9 @@
       <label>Дата</label>
       <input id="mDate" type="date">
     </div>
-    <button class="btn" onclick="saveExpense()">Додати витрату</button>
-    <button class="btn ghost" style="margin-top:8px;" onclick="closeExpenseModal()">Скасувати</button>
+    <button class="btn" onclick="saveExpense()">Зберегти</button>
+    <div id="mSaveStatus" style="text-align:center;font-size:13px;margin-top:8px;min-height:18px;"></div>
+    <button class="btn ghost" style="margin-top:4px;" onclick="closeExpenseModal()">Скасувати</button>
   </div>
 </div>
 
@@ -364,11 +378,37 @@ async function storeSet(key, value){
   }
 }
 
+async function testDataStore(){
+  const banner = document.getElementById('dataStoreBanner');
+  banner.innerHTML = '<div class="banner">Перевіряю…</div>';
+  const testKey = 'conntest';
+  const testVal = 'ok-' + Date.now();
+  try{
+    const postRes = await fetch(SHARED_STORE_BASE + '/data/' + testKey, { method:'POST', body: testVal });
+    const postText = await postRes.text();
+    if(!postRes.ok){
+      banner.innerHTML = '<div class="banner err">Запис не вдався: сервер відповів ' + postRes.status + '. Текст: ' + escapeHtml(postText) + '</div>';
+      return;
+    }
+    const getRes = await fetch(SHARED_STORE_BASE + '/data/' + testKey);
+    const getText = await getRes.text();
+    let parsed;
+    try{ parsed = JSON.parse(getText); }catch(e){ parsed = null; }
+    if(getRes.ok && parsed && parsed.value === testVal){
+      banner.innerHTML = '<div class="banner ok">Сховище працює правильно ✅ (запис і зчитування підтверджено)</div>';
+    } else {
+      banner.innerHTML = '<div class="banner err">Запис пройшов, але зчитування не збіглось. Відповідь сервера: ' + escapeHtml(getText) + '</div>';
+    }
+  }catch(err){
+    banner.innerHTML = '<div class="banner err">Помилка з\'єднання: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
 let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v38';
+const BUILD = 'v39';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -415,6 +455,12 @@ function openTab(name){
   document.querySelector('.tab[data-tab="'+name+'"]').classList.add('active');
   if(name==='products' && !state.productsData && state.config.account && state.config.token){
     loadProducts();
+  }
+  if(name==='exp' && !state.expensesPeriodInitialized){
+    state.expensesPeriodInitialized = true;
+    renderExpensesPeriodRow();
+    renderExpensesPeriodBanner();
+    renderExpenses();
   }
 }
 
@@ -771,6 +817,7 @@ function openExpenseModal(){
   document.getElementById('mCategory').value = 'Оренда';
   document.getElementById('mCommentWrap').style.display = 'none';
   document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('mSaveStatus').innerHTML = '';
 }
 function closeExpenseModal(){ document.getElementById('expModalBg').classList.remove('show'); }
 document.getElementById('mRecurring').addEventListener('click', function(){
@@ -778,9 +825,10 @@ document.getElementById('mRecurring').addEventListener('click', function(){
 });
 
 async function saveExpense(){
+  const statusEl = document.getElementById('mSaveStatus');
   try{
     const amount = parseFloat(document.getElementById('mAmount').value);
-    if(!amount || amount<=0) return;
+    if(!amount || amount<=0){ statusEl.innerHTML = '<span style="color:var(--red);">Вкажи суму</span>'; return; }
     const recurring = document.getElementById('mRecurring').classList.contains('on');
     const category = document.getElementById('mCategory').value;
     const comment = document.getElementById('mComment').value.trim();
@@ -790,12 +838,20 @@ async function saveExpense(){
       comment: (category==='Інше' && comment) ? comment : null,
       date: recurring ? null : document.getElementById('mDate').value
     };
-    state.expenses.push(exp);
-    await storeSet('expenses', JSON.stringify(state.expenses));
-    closeExpenseModal();
-    renderExpenses();
-    computeAndRender();
-  }catch(e){ showCrash(e.message); }
+    statusEl.innerHTML = '<span style="color:var(--muted);">Зберігаю…</span>';
+    const newExpenses = state.expenses.concat([exp]);
+    const ok = await storeSet('expenses', JSON.stringify(newExpenses));
+    if(ok){
+      state.expenses = newExpenses;
+      statusEl.innerHTML = '<span style="color:var(--green);">✅ Збереглось</span>';
+      renderExpenses();
+      renderExpensesPeriodBanner();
+      computeAndRender();
+      setTimeout(closeExpenseModal, 700);
+    } else {
+      statusEl.innerHTML = '<span style="color:var(--red);">❌ Помилка збереження — спробуй ще раз</span>';
+    }
+  }catch(e){ statusEl.innerHTML = '<span style="color:var(--red);">❌ Помилка: '+escapeHtml(e.message)+'</span>'; }
 }
 
 async function deleteExpense(id){
@@ -809,9 +865,16 @@ async function deleteExpense(id){
 
 function renderExpenses(){
   const el = document.getElementById('expList');
-  if(!state.expenses.length){ el.innerHTML = '<div class="empty">Витрат ще немає. Додай оренду, ЗП, комуналку тощо.</div>'; return; }
+  const {from,to} = getExpensesPeriodRange();
+  const visible = state.expenses.filter(e=>{
+    if(e.recurring) return true; // ongoing bills always shown
+    if(!e.date) return true;
+    const d = new Date(e.date);
+    return d>=new Date(from.toDateString()) && d<=new Date(to.toDateString());
+  });
+  if(!visible.length){ el.innerHTML = '<div class="empty">Витрат за цей період немає.</div>'; return; }
   el.innerHTML = '';
-  state.expenses.slice().reverse().forEach(e=>{
+  visible.slice().reverse().forEach(e=>{
     const div = document.createElement('div');
     div.className = 'exp-item';
     const nameLabel = e.comment ? (e.category + ' — ' + e.comment) : e.category;
@@ -821,8 +884,7 @@ function renderExpenses(){
   });
 }
 
-function expensesForPeriod(){
-  const {from,to} = getPeriodRange();
+function sumExpenses(from, to){
   const days = daysInPeriod(from,to);
   let total = 0;
   state.expenses.forEach(e=>{
@@ -835,6 +897,70 @@ function expensesForPeriod(){
     }
   });
   return total;
+}
+
+function expensesForPeriod(){
+  const {from,to} = getPeriodRange();
+  return sumExpenses(from,to);
+}
+
+// ---------- expenses page: its own period selector, independent of the Dashboard's ----------
+function getExpensesPeriodRange(){
+  const now = new Date();
+  let from, to;
+  const period = state.expensesPeriod || 'today';
+  if(period==='today'){ from = new Date(now); to = new Date(now); }
+  else if(period==='week'){ from = new Date(now); from.setDate(from.getDate()-6); to = new Date(now); }
+  else if(period==='custom' && state.expensesCustomFrom && state.expensesCustomTo){
+    from = new Date(state.expensesCustomFrom); to = new Date(state.expensesCustomTo);
+  }
+  else { from = new Date(now.getFullYear(), now.getMonth(), 1); to = new Date(now); } // month
+  return {from, to};
+}
+
+function renderExpensesPeriodRow(){
+  const periods = [['today','Сьогодні'],['week','Цей тиждень'],['month','Цей місяць'],['custom','Свій період 📅']];
+  const row = document.getElementById('expPeriodRow');
+  row.innerHTML = '';
+  periods.forEach(([key,label])=>{
+    const b = document.createElement('div');
+    b.className = 'period-btn' + ((state.expensesPeriod||'today')===key ? ' active':'');
+    b.textContent = label;
+    b.onclick = ()=>{
+      state.expensesPeriod = key;
+      renderExpensesPeriodRow();
+      if(key==='custom'){
+        document.getElementById('expCustomRangeRow').style.display = 'flex';
+        document.getElementById('expCustomApplyRow').style.display = 'block';
+        if(!document.getElementById('expCustomFromInput').value){
+          const today = new Date().toISOString().slice(0,10);
+          document.getElementById('expCustomFromInput').value = today;
+          document.getElementById('expCustomToInput').value = today;
+        }
+      } else {
+        document.getElementById('expCustomRangeRow').style.display = 'none';
+        document.getElementById('expCustomApplyRow').style.display = 'none';
+        renderExpenses();
+        renderExpensesPeriodBanner();
+      }
+    };
+    row.appendChild(b);
+  });
+}
+
+function applyExpenseCustomRange(){
+  state.expensesCustomFrom = document.getElementById('expCustomFromInput').value;
+  state.expensesCustomTo = document.getElementById('expCustomToInput').value;
+  if(!state.expensesCustomFrom || !state.expensesCustomTo) return;
+  renderExpenses();
+  renderExpensesPeriodBanner();
+}
+
+function renderExpensesPeriodBanner(){
+  const el = document.getElementById('expPeriodBanner');
+  const {from,to} = getExpensesPeriodRange();
+  const total = sumExpenses(from,to);
+  el.innerHTML = '<div class="banner">Витрати за обраний період: <b style="color:var(--text)">'+fmtMoney(total)+'</b></div>';
 }
 
 // ---------- PRODUCTS ----------
