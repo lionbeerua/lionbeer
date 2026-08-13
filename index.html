@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#141210">
 <meta name="supported-color-schemes" content="dark">
 <title>Lion Beer · Чистий прибуток</title>
 <style>
@@ -411,7 +412,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v41';
+const BUILD = 'v42';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -1203,11 +1204,22 @@ async function syncSharedExpenses(){
   try{
     const e = await storeGet('expenses');
     if(e){
-      const parsed = JSON.parse(e);
-      if(JSON.stringify(parsed) !== JSON.stringify(state.expenses)){
-        state.expenses = parsed;
+      const remote = JSON.parse(e);
+      // merge by id: keep anything present locally even if the server hasn't caught up
+      // yet (Cloudflare KV can take up to ~60s to propagate a write globally), plus
+      // anything new that showed up remotely (e.g. added from another device)
+      const byId = {};
+      remote.forEach(x=>{ byId[x.id] = x; });
+      state.expenses.forEach(x=>{ byId[x.id] = x; }); // local wins on conflict, nothing is ever silently dropped
+      const merged = Object.values(byId).sort((a,b)=>a.id-b.id);
+      if(JSON.stringify(merged) !== JSON.stringify(state.expenses)){
+        state.expenses = merged;
         renderExpenses();
         computeAndRender();
+      }
+      // if merging surfaced something the server didn't have yet, write the full picture back
+      if(merged.length !== remote.length){
+        storeSet('expenses', JSON.stringify(merged));
       }
     }
   }catch(err){ /* silent — next tick will retry */ }
