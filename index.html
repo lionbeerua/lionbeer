@@ -418,7 +418,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v46';
+const BUILD = 'v47';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -697,17 +697,24 @@ async function loadCashWriteOffs(from, to){
   if(!state.priceByKey){ await loadCategoryMap(); }
   const priceByKey = state.priceByKey || {};
 
-  // process ALL matched records — no cap. Correctness matters more than speed here;
-  // wide ranges (e.g. "since the start") will just take longer to refresh.
+  // process ALL matched records — no data loss, but fetch in parallel batches
+  // instead of one-by-one (huge speedup on wide date ranges, still free)
   const toFetch = matchedList;
   let totalCost = 0;
   let totalSaleEquivalent = 0;
   let totalMatchedItems = 0, totalUnmatchedItems = 0;
   const traceLines = [];
-  for(const w of toFetch){
-    totalCost += parseFloat(w.total_sum||0) / 100;
-    try{
-      const detail = await posterFetch('storage.getWaste', { waste_id: w.waste_id });
+
+  toFetch.forEach(w=>{ totalCost += parseFloat(w.total_sum||0) / 100; });
+
+  const BATCH_SIZE = 15;
+  for(let i=0; i<toFetch.length; i+=BATCH_SIZE){
+    const batch = toFetch.slice(i, i+BATCH_SIZE);
+    const results = await Promise.all(batch.map(w =>
+      posterFetch('storage.getWaste', { waste_id: w.waste_id }).catch(err => ({__error: err.message, waste_id: w.waste_id}))
+    ));
+    results.forEach(detail=>{
+      if(detail.__error){ notes.push('деталі waste_id ' + detail.waste_id + ': ' + detail.__error); return; }
       const elements = detail.elements || [];
       elements.forEach(el=>{
         const qty = parseFloat(el.count ?? 0);
@@ -723,7 +730,7 @@ async function loadCashWriteOffs(from, to){
         }
         if(traceLines.length < 8) traceLines.push('product ' + el.product_id + ' key=' + key + ' qty=' + qty + ' price=' + (price!=null?price:'НЕ ЗНАЙДЕНО'));
       });
-    }catch(err){ notes.push('деталі waste_id ' + w.waste_id + ': ' + err.message); }
+    });
   }
   notes.push('за період відфільтровано: ' + matchedList.length + ' з ' + list.length + ' записів усього (враховано в розрахунку: ' + toFetch.length + ')');
   notes.push('позицій знайдено ціну: ' + totalMatchedItems + ', не знайдено: ' + totalUnmatchedItems);
