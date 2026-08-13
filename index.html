@@ -214,7 +214,8 @@
     </div>
 
     <div class="grid">
-      <div class="card"><div class="k">Виручка</div><div class="v" id="revVal">—</div></div>
+      <div class="card"><div class="k">Загальна виручка (Poster + готівка)</div><div class="v" id="revVal">—</div></div>
+      <div class="card"><div class="k">Виручка з Poster</div><div class="v" id="revPosterVal">—</div></div>
       <div class="card"><div class="k">Чеків</div><div class="v" id="checksVal">—</div></div>
       <div class="card"><div class="k">Середній чек</div><div class="v" id="avgCheckVal">—</div></div>
       <div class="card"><div class="k">Собівартість</div><div class="v" id="cogsVal">—</div></div>
@@ -417,7 +418,7 @@ let state = {
   config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v44';
+const BUILD = 'v46';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -1184,21 +1185,26 @@ function renderProductRow(row){
 
 
 function computeAndRender(){
-  const revenue = state.dashData ? state.dashData.revenue : 0;
+  const posterRevenue = state.dashData ? state.dashData.revenue : 0;
   const checks = state.dashData && state.dashData.checks!=null ? state.dashData.checks : '—';
   const grossProfit = state.dashData ? state.dashData.grossProfit : 0; // вже за вирахуванням собівартості — рахує сам Poster
-  let cashProfit = (state.dashData && state.dashData.cashWriteOffs) ? state.dashData.cashWriteOffs.totalProfit : 0;
+  const cw = (state.dashData && state.dashData.cashWriteOffs) ? state.dashData.cashWriteOffs : null;
+  let cashProfit = cw ? cw.totalProfit : 0;
+  let cashRevenue = cw ? cw.totalSaleEquivalent : 0;
   if(isNaN(cashProfit)) cashProfit = 0;
-  const cogs = revenue - grossProfit; // собівартість = виручка мінус прибуток Poster
+  if(isNaN(cashRevenue)) cashRevenue = 0;
+  const revenue = posterRevenue + cashRevenue; // загальна виручка = Poster + готівка (Вайсбург бланш)
+  const cogs = posterRevenue - grossProfit; // собівартість = виручка Poster мінус прибуток Poster
   const expenses = expensesForPeriod();
   const net = grossProfit + cashProfit - expenses;
   const margin = revenue>0 ? (net/revenue*100) : 0;
 
   document.getElementById('revVal').textContent = state.dashData ? fmtMoney(revenue) : '—';
+  document.getElementById('revPosterVal').textContent = state.dashData ? fmtMoney(posterRevenue) : '—';
   document.getElementById('checksVal').textContent = checks;
   const avgCheck = state.dashData && state.dashData.avgCheck!=null
     ? state.dashData.avgCheck
-    : ((state.dashData && typeof checks === 'number' && checks>0) ? (revenue/checks) : null);
+    : ((state.dashData && typeof checks === 'number' && checks>0) ? (posterRevenue/checks) : null);
   document.getElementById('avgCheckVal').textContent = avgCheck!=null ? fmtMoney(avgCheck) : '—';
   document.getElementById('cogsVal').textContent = state.dashData ? fmtMoney(cogs) : '—';
   document.getElementById('expVal').textContent = fmtMoney(expenses);
@@ -1206,7 +1212,7 @@ function computeAndRender(){
   const npEl = document.getElementById('netProfitVal');
   npEl.textContent = state.dashData ? fmtMoney(net) : '—';
   npEl.className = 'hero-value ' + (net>=0 ? 'pos':'neg');
-  document.getElementById('marginSub').innerHTML = state.dashData ? ('маржа <b>'+margin.toFixed(1)+'%</b> · прибуток Poster'+(cashProfit?' + Вайсбург бланш':'')+' мінус твої витрати') : 'натисни «Оновити дані з Poster»';
+  document.getElementById('marginSub').innerHTML = state.dashData ? ('маржа <b>'+margin.toFixed(1)+'%</b> · виручка Poster'+(cashRevenue?' + Вайсбург бланш':'')+', прибуток мінус твої витрати') : 'натисни «Оновити дані з Poster»';
 }
 
 function fmtMoney(v){ return Math.round(v).toLocaleString('uk-UA') + ' ₴'; }
