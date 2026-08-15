@@ -274,15 +274,8 @@
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
     <div class="section-title">Підключення Poster</div>
-    <div class="field">
-      <label>Назва акаунту (з адреси account.joinposter.com)</label>
-      <input id="inAccount" placeholder="myshop">
-    </div>
-    <div class="field">
-      <label>API токен</label>
-      <input id="inToken" placeholder="вставте токен" type="password">
-    </div>
-    <button class="btn" onclick="saveConfig()">Зберегти й перевірити з'єднання</button>
+    <div class="banner ok">Токен доступу до Poster зберігається лише на сервері (проксі) і ніколи не потрапляє в код цього сайту — тут його вводити не треба.</div>
+    <button class="btn" onclick="saveConfig()">Перевірити з'єднання</button>
     <div id="connBanner" style="margin-top:12px;"></div>
 
     <div class="section-title" style="margin-top:26px;">Проксі (для обходу CORS)</div>
@@ -415,10 +408,10 @@ async function testDataStore(){
 }
 
 let state = {
-  config:{account:'beershop', token:'924746:97112761524c71c811cb890200ad9866', foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
+  config:{foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v48';
+const BUILD = 'v49';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -427,8 +420,6 @@ async function loadState(){
   const e = await storeGet('expenses');
   if(e){ try{ state.expenses = JSON.parse(e); }catch(err){} }
 
-  document.getElementById('inAccount').value = state.config.account||'';
-  document.getElementById('inToken').value = state.config.token||'';
   document.getElementById('inProxy').value = state.config.proxy||'';
 
   updateStatusLine();
@@ -437,7 +428,7 @@ async function loadState(){
   computeAndRender();
 
   // auto test connection + load dashboard right away since we already have credentials
-  if(state.config.account && state.config.token){
+  if(state.config.proxy){
     await testConnectionSilently();
     await loadDashboard();
   }
@@ -455,7 +446,7 @@ async function testConnectionSilently(){
 
 function updateStatusLine(){
   const s = document.getElementById('statusLine');
-  s.textContent = state.config.account && state.config.token ? ('Акаунт: ' + state.config.account) : 'Не підключено до Poster';
+  s.textContent = state.config.proxy ? 'Підключено через проксі' : 'Проксі не налаштовано';
 }
 
 function openTab(name){
@@ -463,7 +454,7 @@ function openTab(name){
   document.getElementById('page-'+name).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.tab[data-tab="'+name+'"]').classList.add('active');
-  if(name==='products' && !state.productsData && state.config.account && state.config.token){
+  if(name==='products' && !state.productsData && state.config.proxy){
     loadProducts();
   }
   if(name==='exp' && !state.expensesPeriodInitialized){
@@ -477,9 +468,6 @@ function openTab(name){
 // ---------- SETTINGS ----------
 async function saveConfig(){
   try{
-    state.config.account = document.getElementById('inAccount').value.trim();
-    state.config.token = document.getElementById('inToken').value.trim();
-    await storeSet('config', JSON.stringify(state.config));
     updateStatusLine();
     const banner = document.getElementById('connBanner');
     banner.innerHTML = '<div class="banner">Перевіряю з’єднання…</div>';
@@ -488,7 +476,7 @@ async function saveConfig(){
       banner.innerHTML = '<div class="banner ok">Підключено успішно ✅</div>';
       await loadDashboard();
     }catch(err){
-      banner.innerHTML = '<div class="banner err">Не вдалось підключитись: ' + escapeHtml(err.message) + '. Якщо це помилка мережі/CORS — знадобиться невеликий проксі-сервер, скажи мені, і я це підготую.</div>';
+      banner.innerHTML = '<div class="banner err">Не вдалось підключитись: ' + escapeHtml(err.message) + '</div>';
     }
   }catch(e){ showCrash(e.message); }
 }
@@ -573,17 +561,15 @@ function daysInMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0).get
 // ---------- POSTER API ----------
 async function posterFetch(method, params){
   params = params || {};
-  const {account, token, proxy} = state.config;
-  if(!account || !token) throw new Error('Немає токена/акаунту — заповни в Налаштуваннях');
-  const qs = new URLSearchParams({token, ...params}).toString();
-  const url = proxy
-    ? (proxy.replace(/\/$/,'') + '/api/' + method + '?' + qs)
-    : ('https://' + account + '.joinposter.com/api/' + method + '?' + qs);
+  const proxy = state.config.proxy;
+  if(!proxy) throw new Error('Проксі не налаштовано — заповни в Налаштуваннях');
+  const qs = new URLSearchParams(params).toString();
+  const url = proxy.replace(/\/$/,'') + '/api/' + method + (qs ? '?' + qs : '');
   let res;
   try{
     res = await fetch(url);
   }catch(e){
-    throw new Error('Мережева помилка (можливо CORS — потрібен проксі, див. Налаштування): ' + e.message);
+    throw new Error('Мережева помилка: ' + e.message);
   }
   const data = await res.json();
   if(data.error){
@@ -766,7 +752,7 @@ async function loadCashWriteOffs(from, to){
 async function loadDashboard(){
   const banner = document.getElementById('dashBanner');
   const btn = document.getElementById('refreshBtn');
-  if(!state.config.account || !state.config.token){
+  if(!state.config.proxy){
     banner.innerHTML = '<div class="banner">Спочатку підключи Poster у Налаштуваннях ⚙️</div>';
     return;
   }
