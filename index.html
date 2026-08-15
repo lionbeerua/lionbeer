@@ -411,7 +411,7 @@ let state = {
   config:{foodcost:30, proxy:'https://lion-beer-proxy.lionbeer-ua.workers.dev'},
   expenses:[], period:'today', customFrom:null, customTo:null, dashData:null
 };
-const BUILD = 'v49';
+const BUILD = 'v50';
 
 async function loadState(){
   document.getElementById('buildLine').textContent = 'версія ' + BUILD;
@@ -1242,16 +1242,30 @@ async function syncSharedExpenses(){
 }
 setInterval(syncSharedExpenses, 15000);
 
-const APP_PASSWORD = '0110';
-function tryUnlock(){
+async function tryUnlock(){
+  const btn = document.getElementById('lockBtn');
   const val = document.getElementById('lockInput').value;
-  if(val === APP_PASSWORD){
-    document.getElementById('lockScreen').style.display = 'none';
-    loadState();
-  } else {
-    document.getElementById('lockError').textContent = 'Невірний пароль';
-    document.getElementById('lockInput').value = '';
+  const errEl = document.getElementById('lockError');
+  btn.disabled = true;
+  errEl.textContent = '';
+  try{
+    const res = await fetch(SHARED_STORE_BASE + '/check-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: val })
+    });
+    const data = await res.json();
+    if(data.ok){
+      document.getElementById('lockScreen').style.display = 'none';
+      loadState();
+    } else {
+      errEl.textContent = 'Невірний пароль';
+      document.getElementById('lockInput').value = '';
+    }
+  }catch(e){
+    errEl.textContent = 'Помилка з’єднання, спробуй ще раз';
   }
+  btn.disabled = false;
 }
 document.getElementById('lockBtn').addEventListener('click', tryUnlock);
 document.getElementById('lockInput').addEventListener('keydown', function(e){
